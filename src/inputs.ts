@@ -6,12 +6,16 @@ const keys: [key: string, required: boolean][] = [
   ['github_token', true],
   ['github_api_url', true],
   ['config_file', true],
+  ['private_key', true],
+  ['passphrase', true],
 ];
 
 export type Inputs = {
   github_token: string;
   github_api_url: string;
   config_file: string;
+  private_key: string;
+  passphrase: string;
 };
 
 export const getInputs = (): Inputs => {

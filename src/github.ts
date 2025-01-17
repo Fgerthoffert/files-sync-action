@@ -1,6 +1,7 @@
 import * as T from 'fp-ts/Either';
 import * as TE from 'fp-ts/TaskEither';
 import { getOctokit } from '@actions/github';
+import * as openpgp from 'openpgp';
 import type { Inputs } from './inputs.js';
 import type { MergeMode, MergeStrategy } from './config.ts';
 
@@ -90,6 +91,8 @@ export enum MergeResult {
 export type GitHubRepository = {
   owner: string;
   name: string;
+  private_key: string;
+  passphrase: string;
   createBranch: (name: string) => TE.TaskEither<Error, Branch>;
   deleteBranch: (name: string) => TE.TaskEither<Error, void>;
   commit: (params: GitHubRepositoryCommitParams) => TE.TaskEither<Error, Commit>;
@@ -108,6 +111,8 @@ export type GitHubRepository = {
 type CreateGitHubRepositoryParams = {
   octokit: ReturnType<typeof getOctokit>;
   name: string;
+  private_key: string;
+  passphrase: string;
 };
 
 type GraphPullRequest = {
@@ -135,7 +140,7 @@ type GraphPullRequestMergeInput = {
 };
 
 const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams], GitHubRepository>(
-  async ({ octokit, name }) => {
+  async ({ octokit, name, private_key, passphrase }) => {
     const parsed = parseRepositoryName(name);
     if (T.isLeft(parsed)) {
       throw parsed.left;
@@ -315,12 +320,33 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
           })),
         });
 
+        const privateKey = await openpgp.decryptKey({
+          privateKey: await openpgp.readPrivateKey({ armoredKey: private_key }),
+          passphrase
+        });
+
+        const commitMessage = await openpgp.createMessage({
+          text: [
+            'tree ' + tree,
+            'parent ' + parent,
+            '',
+            message,
+          ].join('\n')
+        });
+
+        const detachedSignature = await openpgp.sign({
+            message: commitMessage,
+            signingKeys: [privateKey],
+            detached: true,
+        });
+      
         // commit
         const { data: commit } = await octokit.rest.git.createCommit({
           ...defaults,
           tree: tree.sha,
           message,
           parents: [parent],
+          signature: detachedSignature.toString(),
         });
 
         // apply to branch
@@ -475,6 +501,7 @@ export const createGitHub = (inputs: Inputs): GitHub => {
       const repo = await createGitHubRepository({
         octokit,
         name,
+        inputs.private_key,
       })();
       if (T.isLeft(repo)) {
         throw repo.left;
