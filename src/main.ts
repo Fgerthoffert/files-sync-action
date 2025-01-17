@@ -208,6 +208,8 @@ const run = async (): Promise<number> => {
           content: file.content,
         })),
         force: cfg.pull_request.force,
+        private_key: inputs.private_key,
+        passphrase: inputs.passphrase
       })();
       if (T.isLeft(commit)) {
         core.info(

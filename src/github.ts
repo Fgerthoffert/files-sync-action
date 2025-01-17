@@ -64,6 +64,8 @@ export type GitHubRepositoryCommitParams = {
   files: CommitFile[];
   message: string;
   force: boolean;
+  private_key: string;
+  passphrase: string;
 };
 
 export type GitHubRepositoryCreateOrUpdatePullRequestParams = {
@@ -91,8 +93,6 @@ export enum MergeResult {
 export type GitHubRepository = {
   owner: string;
   name: string;
-  private_key: string;
-  passphrase: string;
   createBranch: (name: string) => TE.TaskEither<Error, Branch>;
   deleteBranch: (name: string) => TE.TaskEither<Error, void>;
   commit: (params: GitHubRepositoryCommitParams) => TE.TaskEither<Error, Commit>;
@@ -111,8 +111,6 @@ export type GitHubRepository = {
 type CreateGitHubRepositoryParams = {
   octokit: ReturnType<typeof getOctokit>;
   name: string;
-  private_key: string;
-  passphrase: string;
 };
 
 type GraphPullRequest = {
@@ -140,7 +138,7 @@ type GraphPullRequestMergeInput = {
 };
 
 const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams], GitHubRepository>(
-  async ({ octokit, name, private_key, passphrase }) => {
+  async ({ octokit, name }) => {
     const parsed = parseRepositoryName(name);
     if (T.isLeft(parsed)) {
       throw parsed.left;
@@ -308,7 +306,7 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
         });
       }, handleErrorReason),
 
-      commit: TE.tryCatchK(async ({ parent, branch, files, message, force }) => {
+      commit: TE.tryCatchK(async ({ parent, branch, files, message, force, private_key, passphrase }) => {
         // create tree
         const { data: tree } = await octokit.rest.git.createTree({
           ...defaults,
@@ -501,7 +499,6 @@ export const createGitHub = (inputs: Inputs): GitHub => {
       const repo = await createGitHubRepository({
         octokit,
         name,
-        inputs.private_key,
       })();
       if (T.isLeft(repo)) {
         throw repo.left;
