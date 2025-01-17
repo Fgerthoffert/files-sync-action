@@ -323,10 +323,13 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
           passphrase
         });
 
+        const now = Date.now();
         const commitMessage = await openpgp.createMessage({
           text: [
             'tree ' + tree,
             'parent ' + parent,
+            'author Jahia CI <jahia-ci@jahia.com> ' + Math.floor(now / 1000) + ' +0000',
+            'committer Jahia CI <jahia-ci@jahia.com> ' + Math.floor(now / 1000) + ' +0000',
             '',
             message,
           ].join('\n')
