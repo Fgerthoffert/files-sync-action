@@ -323,13 +323,12 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
           passphrase
         });
 
-        const now = Date.now();
         const commitMessage = await openpgp.createMessage({
           text: [
             'tree ' + tree,
             'parent ' + parent,
-            'author Jahia Continuous Integration account <jahia-ci@jahia.com> ' + Math.floor(now / 1000) + ' +0000',
-            'committer Jahia Continuous Integration account <jahia-ci@jahia.com> ' + Math.floor(now / 1000) + ' +0000',
+            'author Jahia Continuous Integration account <jahia-ci@jahia.com> ',
+            'committer Jahia Continuous Integration account <jahia-ci@jahia.com> ',
             '',
             message,
           ].join('\n')
@@ -347,7 +346,7 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
           tree: tree.sha,
           message: message,
           parents: [parent],
-          author: {name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now},
+          author: {name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: new Date().toISOString()},
           signature: detachedSignature.toString(),
         });
 
