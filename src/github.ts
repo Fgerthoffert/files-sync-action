@@ -323,12 +323,17 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
           passphrase,
         });
 
+        const now: Date = new Date();
         const commitMessage = await openpgp.createMessage({
           text: [
             'tree ' + tree,
             'parent ' + parent,
-            'author Jahia Continuous Integration account <jahia-ci@jahia.com>',
-            'committer Jahia Continuous Integration account <jahia-ci@jahia.com>',
+            'author Jahia Continuous Integration account <jahia-ci@jahia.com>' +
+              Math.floor(now.getDate() / 1000) +
+              ' +0000',
+            'committer Jahia Continuous Integration account <jahia-ci@jahia.com>' +
+              Math.floor(now.getDate() / 1000) +
+              ' +0000',
             '',
             message,
           ].join('\n'),
@@ -341,14 +346,14 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
         });
 
         // commit
-        const now = new Date().toISOString();
+        const nowStr = new Date(now).toISOString();
         const { data: commit } = await octokit.rest.git.createCommit({
           ...defaults,
           tree: tree.sha,
           message: message,
           parents: [parent],
-          author: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now },
-          committer: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now },
+          author: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: nowStr },
+          committer: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: nowStr },
           signature: detachedSignature.toString(),
         });
 

@@ -90283,17 +90283,18 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
             });
             const privateKey = await decryptKey({
                 privateKey: await readPrivateKey({ armoredKey: private_key }),
-                passphrase
+                passphrase,
             });
+            const now = new Date();
             const commitMessage = await createMessage({
                 text: [
                     'tree ' + tree,
                     'parent ' + parent,
-                    'author Jahia Continuous Integration account <jahia-ci@jahia.com>',
-                    'committer Jahia Continuous Integration account <jahia-ci@jahia.com>',
+                    'author Jahia Continuous Integration account <jahia-ci@jahia.com>' + Math.floor(now.getDate() / 1000) + ' +0000',
+                    'committer Jahia Continuous Integration account <jahia-ci@jahia.com>' + Math.floor(now.getDate() / 1000) + ' +0000',
                     '',
                     message,
-                ].join('\n')
+                ].join('\n'),
             });
             const detachedSignature = await sign({
                 message: commitMessage,
@@ -90301,19 +90302,21 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 detached: true,
             });
             // commit
-            const now = new Date().toISOString();
             const { data: commit } = await octokit.rest.git.createCommit({
                 ...defaults,
                 tree: tree.sha,
                 message: message,
                 parents: [parent],
-                author: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now },
-                committer: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now },
+                author: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now.toISOString() },
+                committer: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now.toISOString() },
                 signature: detachedSignature.toString(),
             });
             const verification = commit.verification;
             if (!verification || verification.verified !== true) {
-                throw new Error('Commit signature could not be verified\nReason: ' + verification.reason + '\nPayload: ' + verification.payload);
+                throw new Error('Commit signature could not be verified - Reason: ' +
+                    verification.reason +
+                    ' - Payload: ' +
+                    verification.payload);
             }
             // apply to branch
             await octokit.rest.git.updateRef({
