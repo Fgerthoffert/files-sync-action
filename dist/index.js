@@ -90311,6 +90311,10 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 committer: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now },
                 signature: detachedSignature.toString(),
             });
+            const verification = commit.verification;
+            if (!verification || verification.verified !== true) {
+                throw new Error('Commit signature could not be verified\nReason: ' + verification.reason + '\nPayload: ' + verification.payload);
+            }
             // apply to branch
             await octokit.rest.git.updateRef({
                 ...defaults,

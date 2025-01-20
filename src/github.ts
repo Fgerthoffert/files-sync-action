@@ -320,7 +320,7 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
 
         const privateKey = await openpgp.decryptKey({
           privateKey: await openpgp.readPrivateKey({ armoredKey: private_key }),
-          passphrase
+          passphrase,
         });
 
         const commitMessage = await openpgp.createMessage({
@@ -331,15 +331,15 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
             'committer Jahia Continuous Integration account <jahia-ci@jahia.com>',
             '',
             message,
-          ].join('\n')
+          ].join('\n'),
         });
 
         const detachedSignature = await openpgp.sign({
-            message: commitMessage,
-            signingKeys: [privateKey],
-            detached: true,
+          message: commitMessage,
+          signingKeys: [privateKey],
+          detached: true,
         });
-      
+
         // commit
         const now = new Date().toISOString();
         const { data: commit } = await octokit.rest.git.createCommit({
@@ -347,11 +347,21 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
           tree: tree.sha,
           message: message,
           parents: [parent],
-          author: {name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now},
-          committer: {name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now},
+          author: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now },
+          committer: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now },
           signature: detachedSignature.toString(),
         });
-        
+
+        const verification = commit.verification;
+        if (!verification || verification.verified !== true) {
+          throw new Error(
+            'Commit signature could not be verified - Reason: ' +
+              verification.reason +
+              ' - Payload: ' +
+              verification.payload,
+          );
+        }
+
         // apply to branch
         await octokit.rest.git.updateRef({
           ...defaults,
