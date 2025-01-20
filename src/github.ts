@@ -328,8 +328,8 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
           text: [
             'tree ' + tree,
             'parent ' + parent,
-            'author Jahia CI <jahia-ci@jahia.com> ' + Math.floor(now / 1000) + ' +0000',
-            'committer Jahia CI <jahia-ci@jahia.com> ' + Math.floor(now / 1000) + ' +0000',
+            'author Jahia Continuous Integration account <jahia-ci@jahia.com> ' + Math.floor(now / 1000) + ' +0000',
+            'committer Jahia Continuous Integration account <jahia-ci@jahia.com> ' + Math.floor(now / 1000) + ' +0000',
             '',
             message,
           ].join('\n')
@@ -345,8 +345,9 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
         const { data: commit } = await octokit.rest.git.createCommit({
           ...defaults,
           tree: tree.sha,
-          message,
+          message: message,
           parents: [parent],
+          author: {name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now},
           signature: detachedSignature.toString(),
         });
 
