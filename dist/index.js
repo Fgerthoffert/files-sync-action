@@ -90285,13 +90285,12 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 privateKey: await readPrivateKey({ armoredKey: private_key }),
                 passphrase
             });
-            const now = Date.now();
             const commitMessage = await createMessage({
                 text: [
                     'tree ' + tree,
                     'parent ' + parent,
-                    'author Jahia CI <jahia-ci@jahia.com> ' + Math.floor(now / 1000) + ' +0000',
-                    'committer Jahia CI <jahia-ci@jahia.com> ' + Math.floor(now / 1000) + ' +0000',
+                    'author Jahia Continuous Integration account <jahia-ci@jahia.com> ',
+                    'committer Jahia Continuous Integration account <jahia-ci@jahia.com> ',
                     '',
                     message,
                 ].join('\n')
@@ -90305,8 +90304,9 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
             const { data: commit } = await octokit.rest.git.createCommit({
                 ...defaults,
                 tree: tree.sha,
-                message,
+                message: message,
                 parents: [parent],
+                author: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: new Date().toISOString() },
                 signature: detachedSignature.toString(),
             });
             // apply to branch
