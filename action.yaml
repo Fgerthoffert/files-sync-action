@@ -15,11 +15,17 @@ inputs:
   config_file:
     description: 'The path for the sync configuration file.'
     default: '.github/files-sync-config.yaml'
-  private_key:
-    description: 'The private key (armored): -----BEGIN PGP PRIVATE KEY BLOCK----- ...'
+  gpg_username:
+    description: 'The username to use for the signature'
     default: ''
-  passphrase:
-    description: 'The passphrase'
+  gpg_email:
+    description: 'The email to use for the signature'
+    default: ''
+  gpg_private_key:
+    description: 'The private key created for the user with the username and email provided: -----BEGIN PGP PRIVATE KEY BLOCK----- ...'
+    default: ''
+  gpg_passphrase:
+    description: 'The passphrase to read the key'
     default: ''
 
 outputs:

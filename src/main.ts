@@ -190,27 +190,52 @@ const run = async (): Promise<number> => {
       info('Branch SHA', parent);
 
       // Commit files
-      const commit = await repo.commit({
-        parent,
-        branch,
-        message: render(cfg.commit.format, {
-          prefix: cfg.commit.prefix,
-          subject: render(cfg.commit.subject, {
+      let commit;
+      if (inputs.gpg_private_key !== null && inputs.gpg_passphrase !== null) {
+        commit = await repo.commit({
+          parent,
+          branch,
+          message: render(cfg.commit.format, {
+            prefix: cfg.commit.prefix,
+            subject: render(cfg.commit.subject, {
+              repository: GH_REPOSITORY,
+              index: i,
+            }),
             repository: GH_REPOSITORY,
             index: i,
           }),
-          repository: GH_REPOSITORY,
-          index: i,
-        }),
-        files: files.right.map((file) => ({
-          path: file.to,
-          mode: file.mode,
-          content: file.content,
-        })),
-        force: cfg.pull_request.force,
-        private_key: inputs.private_key,
-        passphrase: inputs.passphrase
-      })();
+          files: files.right.map((file) => ({
+            path: file.to,
+            mode: file.mode,
+            content: file.content,
+          })),
+          force: cfg.pull_request.force,
+          name: inputs.gpg_name,
+          email: inputs.gpg_email,
+          private_key: inputs.gpg_private_key,
+          passphrase: inputs.gpg_passphrase,
+        })();
+      } else {
+        commit = await repo.unsignedCommit({
+          parent,
+          branch,
+          message: render(cfg.commit.format, {
+            prefix: cfg.commit.prefix,
+            subject: render(cfg.commit.subject, {
+              repository: GH_REPOSITORY,
+              index: i,
+            }),
+            repository: GH_REPOSITORY,
+            index: i,
+          }),
+          files: files.right.map((file) => ({
+            path: file.to,
+            mode: file.mode,
+            content: file.content,
+          })),
+          force: cfg.pull_request.force,
+        })();
+      }
       if (T.isLeft(commit)) {
         core.info(
           'If pushing to .github/workflows, make sure the github token has the "workflow" scope. See: https://github.com/wadackel/files-sync-action?tab=readme-ov-file#authentication',

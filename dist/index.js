@@ -90270,7 +90270,34 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 ref: `heads/${name}`,
             });
         }, handleErrorReason),
-        commit: TaskEither.tryCatchK(async ({ parent, branch, files, message, force, private_key, passphrase }) => {
+        unsignedCommit: TaskEither.tryCatchK(async ({ parent, branch, files, message, force }) => {
+            // create tree
+            const { data: tree } = await octokit.rest.git.createTree({
+                ...defaults,
+                base_tree: parent,
+                tree: files.map((file) => ({
+                    mode: file.mode,
+                    path: file.path,
+                    content: file.content,
+                })),
+            });
+            // commit
+            const { data: commit } = await octokit.rest.git.createCommit({
+                ...defaults,
+                tree: tree.sha,
+                message,
+                parents: [parent]
+            });
+            // apply to branch
+            await octokit.rest.git.updateRef({
+                ...defaults,
+                ref: `heads/${branch}`,
+                sha: commit.sha,
+                force,
+            });
+            return commit;
+        }, handleErrorReason),
+        commit: TaskEither.tryCatchK(async ({ parent, branch, files, message, force, name, email, private_key, passphrase }) => {
             // create tree
             const { data: tree } = await octokit.rest.git.createTree({
                 ...defaults,
@@ -90287,19 +90314,15 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
             });
             const now = Date.now();
             const nowStr = new Date(now).toISOString();
-            const authorEmail = 'jahia-ci@jahia.com';
-            const committerEmail = 'jahia-ci@jahia.com';
-            const authorName = 'Jahia CI';
-            const committerName = 'Jahia CI';
             const commitMessage = await createMessage({
                 text: [
                     'tree ' + tree.sha,
                     'parent ' + parent,
-                    'author ' + authorName + ' <' + authorEmail + '> ' + Math.floor(now / 1000) + ' +0000',
-                    'committer ' + committerName + ' <' + committerEmail + '> ' + Math.floor(now / 1000) + ' +0000',
+                    'author ' + name + ' <' + email + '> ' + Math.floor(now / 1000) + ' +0000',
+                    'committer ' + name + ' <' + email + '> ' + Math.floor(now / 1000) + ' +0000',
                     '',
                     message,
-                ].join('\n')
+                ].join('\n'),
             });
             const detachedSignature = await sign({
                 message: commitMessage,
@@ -90313,20 +90336,22 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 message,
                 parents: [parent],
                 author: {
-                    name: authorName,
-                    email: authorEmail,
+                    name: name,
+                    email: email,
                     date: nowStr,
                 },
                 committer: {
-                    name: committerName,
-                    email: committerEmail,
+                    name: name,
+                    email: email,
                     date: nowStr,
                 },
                 signature: detachedSignature.toString(),
             });
             const verification = commit.verification;
             if (!verification || verification.verified !== true) {
-                throw new Error('Commit signature could not be verified - Key ID: ' + privateKey.getKeyID() + ' - Reason: ' +
+                throw new Error('Commit signature could not be verified - Key ID: ' +
+                    privateKey.getKeyID() +
+                    ' - Reason: ' +
                     verification.reason +
                     ' - Payload: ' +
                     verification.payload);
@@ -90488,8 +90513,10 @@ const keys = [
     ['github_token', true],
     ['github_api_url', true],
     ['config_file', true],
-    ['private_key', true],
-    ['passphrase', true],
+    ['gpg_name', false],
+    ['gpg_email', false],
+    ['gpg_private_key', false],
+    ['gpg_passphrase', false],
 ];
 const getInputs = () => {
     const inputs = Object.create(null);
@@ -90676,27 +90703,53 @@ const run = async () => {
             }
             info('Branch SHA', parent);
             // Commit files
-            const commit = await repo.commit({
-                parent,
-                branch,
-                message: (0,ejs__WEBPACK_IMPORTED_MODULE_3__.render)(cfg.commit.format, {
-                    prefix: cfg.commit.prefix,
-                    subject: (0,ejs__WEBPACK_IMPORTED_MODULE_3__.render)(cfg.commit.subject, {
+            let commit;
+            if (inputs.gpg_private_key !== null && inputs.gpg_passphrase !== null) {
+                commit = await repo.commit({
+                    parent,
+                    branch,
+                    message: (0,ejs__WEBPACK_IMPORTED_MODULE_3__.render)(cfg.commit.format, {
+                        prefix: cfg.commit.prefix,
+                        subject: (0,ejs__WEBPACK_IMPORTED_MODULE_3__.render)(cfg.commit.subject, {
+                            repository: _constants_js__WEBPACK_IMPORTED_MODULE_7__/* .GH_REPOSITORY */ .Xf,
+                            index: i,
+                        }),
                         repository: _constants_js__WEBPACK_IMPORTED_MODULE_7__/* .GH_REPOSITORY */ .Xf,
                         index: i,
                     }),
-                    repository: _constants_js__WEBPACK_IMPORTED_MODULE_7__/* .GH_REPOSITORY */ .Xf,
-                    index: i,
-                }),
-                files: files.right.map((file) => ({
-                    path: file.to,
-                    mode: file.mode,
-                    content: file.content,
-                })),
-                force: cfg.pull_request.force,
-                private_key: inputs.private_key,
-                passphrase: inputs.passphrase
-            })();
+                    files: files.right.map((file) => ({
+                        path: file.to,
+                        mode: file.mode,
+                        content: file.content,
+                    })),
+                    force: cfg.pull_request.force,
+                    name: inputs.gpg_name,
+                    email: inputs.gpg_email,
+                    private_key: inputs.gpg_private_key,
+                    passphrase: inputs.gpg_passphrase
+                })();
+            }
+            else {
+                commit = await repo.unsignedCommit({
+                    parent,
+                    branch,
+                    message: (0,ejs__WEBPACK_IMPORTED_MODULE_3__.render)(cfg.commit.format, {
+                        prefix: cfg.commit.prefix,
+                        subject: (0,ejs__WEBPACK_IMPORTED_MODULE_3__.render)(cfg.commit.subject, {
+                            repository: _constants_js__WEBPACK_IMPORTED_MODULE_7__/* .GH_REPOSITORY */ .Xf,
+                            index: i,
+                        }),
+                        repository: _constants_js__WEBPACK_IMPORTED_MODULE_7__/* .GH_REPOSITORY */ .Xf,
+                        index: i,
+                    }),
+                    files: files.right.map((file) => ({
+                        path: file.to,
+                        mode: file.mode,
+                        content: file.content,
+                    })),
+                    force: cfg.pull_request.force
+                })();
+            }
             if (fp_ts_Either__WEBPACK_IMPORTED_MODULE_11__.isLeft(commit)) {
                 _actions_core__WEBPACK_IMPORTED_MODULE_2__.info('If pushing to .github/workflows, make sure the github token has the "workflow" scope. See: https://github.com/wadackel/files-sync-action?tab=readme-ov-file#authentication');
                 _actions_core__WEBPACK_IMPORTED_MODULE_2__.setFailed(`${id} - ${commit.left.message}`);

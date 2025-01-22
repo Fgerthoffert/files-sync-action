@@ -58,12 +58,22 @@ export type CommitDiffEntry = {
   filename: string;
 };
 
+export type GitHubRepositoryUnsignedCommitParams = {
+  parent: string;
+  branch: string;
+  files: CommitFile[];
+  message: string;
+  force: boolean;
+};
+
 export type GitHubRepositoryCommitParams = {
   parent: string;
   branch: string;
   files: CommitFile[];
   message: string;
   force: boolean;
+  name: string;
+  email: string;
   private_key: string;
   passphrase: string;
 };
@@ -95,6 +105,7 @@ export type GitHubRepository = {
   name: string;
   createBranch: (name: string) => TE.TaskEither<Error, Branch>;
   deleteBranch: (name: string) => TE.TaskEither<Error, void>;
+  unsignedCommit: (params: GitHubRepositoryUnsignedCommitParams) => TE.TaskEither<Error, Commit>;
   commit: (params: GitHubRepositoryCommitParams) => TE.TaskEither<Error, Commit>;
   compareCommits: (base: string, head: string) => TE.TaskEither<Error, CommitDiffEntry[]>;
   findExistingPullRequestByBranch: (branch: string) => TE.TaskEither<Error, PullRequest | null>;
@@ -306,7 +317,38 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
         });
       }, handleErrorReason),
 
-      commit: TE.tryCatchK(async ({ parent, branch, files, message, force, private_key, passphrase }) => {
+      unsignedCommit: TE.tryCatchK(async ({ parent, branch, files, message, force }) => {
+        // create tree
+        const { data: tree } = await octokit.rest.git.createTree({
+          ...defaults,
+          base_tree: parent,
+          tree: files.map((file) => ({
+            mode: file.mode,
+            path: file.path,
+            content: file.content,
+          })),
+        });
+
+        // commit
+        const { data: commit } = await octokit.rest.git.createCommit({
+          ...defaults,
+          tree: tree.sha,
+          message,
+          parents: [parent],
+        });
+
+        // apply to branch
+        await octokit.rest.git.updateRef({
+          ...defaults,
+          ref: `heads/${branch}`,
+          sha: commit.sha,
+          force,
+        });
+
+        return commit;
+      }, handleErrorReason),
+
+      commit: TE.tryCatchK(async ({ parent, branch, files, message, force, name, email, private_key, passphrase }) => {
         // create tree
         const { data: tree } = await octokit.rest.git.createTree({
           ...defaults,
@@ -325,17 +367,13 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
 
         const now = Date.now();
         const nowStr = new Date(now).toISOString();
-        const authorEmail = 'jahia-ci@jahia.com';
-        const committerEmail = 'jahia-ci@jahia.com';
-        const authorName = 'Jahia CI';
-        const committerName = 'Jahia CI';
 
         const commitMessage = await openpgp.createMessage({
           text: [
             'tree ' + tree.sha,
             'parent ' + parent,
-            'author ' + authorName + ' <' + authorEmail + '> ' + Math.floor(now / 1000) + ' +0000',
-            'committer ' + committerName + ' <' + committerEmail + '> ' + Math.floor(now / 1000) + ' +0000',
+            'author ' + name + ' <' + email + '> ' + Math.floor(now / 1000) + ' +0000',
+            'committer ' + name + ' <' + email + '> ' + Math.floor(now / 1000) + ' +0000',
             '',
             message,
           ].join('\n'),
@@ -354,13 +392,13 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
           message,
           parents: [parent],
           author: {
-            name: authorName,
-            email: authorEmail,
+            name: name,
+            email: email,
             date: nowStr,
           },
           committer: {
-            name: committerName,
-            email: committerEmail,
+            name: name,
+            email: email,
             date: nowStr,
           },
           signature: detachedSignature.toString(),
