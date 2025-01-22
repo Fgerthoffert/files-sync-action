@@ -14,6 +14,9 @@ importers:
       '@actions/github':
         specifier: ^6.0.0
         version: 6.0.0
+      '@types/openpgp':
+        specifier: ^4.4.22
+        version: 4.4.22
       deepmerge-ts:
         specifier: ^7.0.0
         version: 7.1.0
@@ -29,6 +32,9 @@ importers:
       micromatch:
         specifier: ^4.0.5
         version: 4.0.5
+      openpgp:
+        specifier: ^6.0.1
+        version: 6.0.1
       yaml:
         specifier: ^2.2.1
         version: 2.2.1
@@ -794,6 +800,9 @@ packages:
   '@ts-morph/common@0.24.0':
     resolution: {integrity: sha512-c1xMmNHWpNselmpIqursHeOHHBTIsJLbB+NuovbTTRCNiTLEr/U9dbJ8qy0jd/O2x5pc3seWuOUN5R2IoOTp8A==}
 
+  '@types/bn.js@5.1.6':
+    resolution: {integrity: sha512-Xh8vSwUeMKeYYrj3cX4lGQgFSF/N03r+tv4AiLl1SucqV+uTQpxRcnM8AkXKHwYP9ZPXOYXRr2KPXpVlIvqh9w==}
+
   '@types/braces@3.0.1':
     resolution: {integrity: sha512-+euflG6ygo4bn0JHtn4pYqcXwRtLvElQ7/nnjDu7iYG56H0+OhCd7d6Ug0IE3WcFpZozBKW2+80FUbv5QGk5AQ==}
 
@@ -832,6 +841,9 @@ packages:
 
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
+
+  '@types/openpgp@4.4.22':
+    resolution: {integrity: sha512-afQsbrWITIcSI3OBBJtTA87H5Av2/bjRn6YBHD+abxqJVpD2HRwjP6DL7drboJcuizwcnwnVKSupXYYdImdIoQ==}
 
   '@types/semver@7.5.8':
     resolution: {integrity: sha512-I8EUhyrgfLrcTkzV3TSsGyl1tSuPrEDzr0yd5m90UgNxQkyDXULk3b6MlQqTCpZpNtWe1K0hzclnZkTcLBe2UQ==}
@@ -2411,6 +2423,10 @@ packages:
     resolution: {integrity: sha512-VXJjc87FScF88uafS3JllDgvAm+c/Slfz06lorj2uAY34rlUu0Nt+v8wreiImcrgAjjIHp1rXpTDlLOGw29WwQ==}
     engines: {node: '>=18'}
 
+  openpgp@6.0.1:
+    resolution: {integrity: sha512-3lReDKjgWsKFArZT4Y/yj7/Q0q6/VhXarn4WqKEkyiBWckNjrThSGoB1t0IKo3Ke0ClvBpyQfTwumkGUkxOwww==}
+    engines: {node: '>= 18.0.0'}
+
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
     engines: {node: '>= 0.8.0'}
@@ -3854,6 +3870,10 @@ snapshots:
       mkdirp: 3.0.1
       path-browserify: 1.0.1
 
+  '@types/bn.js@5.1.6':
+    dependencies:
+      '@types/node': 20.17.9
+
   '@types/braces@3.0.1': {}
 
   '@types/conventional-commits-parser@5.0.0':
@@ -3890,6 +3910,10 @@ snapshots:
       undici-types: 6.19.8
 
   '@types/normalize-package-data@2.4.4': {}
+
+  '@types/openpgp@4.4.22':
+    dependencies:
+      '@types/bn.js': 5.1.6
 
   '@types/semver@7.5.8': {}
 
@@ -5539,6 +5563,8 @@ snapshots:
   onetime@7.0.0:
     dependencies:
       mimic-function: 5.0.1
+
+  openpgp@6.0.1: {}
 
   optionator@0.9.4:
     dependencies:

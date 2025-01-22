@@ -155,6 +155,36 @@ API URL of the GitHub server.
 
 The path for the sync configuration file.
 
+### `gpg_username`
+
+**Required:** `false`  
+**Default:** ``
+
+The username to use for the signature
+
+### `gpg_email`
+
+**Required:** `false`  
+**Default:** ``
+
+The email to use for the signature
+
+### `gpg_private_key`
+
+**Required:** `false`  
+**Default:** ``
+
+The private key created for the user with the username and email provided: `-----BEGIN PGP PRIVATE KEY BLOCK-----
+...
+-----END PGP PRIVATE KEY BLOCK-----`
+
+### `gpg_passphrase`
+
+**Required:** `false`  
+**Default:** ``
+
+The passphrase to read the key
+
 <!-- gha-inputs-end -->
 
 ## Outputs
@@ -433,6 +463,12 @@ Customize the contents of each created file.
 process.env['INPUT_GITHUB_TOKEN'] = '...';
 process.env['INPUT_CONFIG_FILE'] = 'test.yaml';
 process.env['INPUT_GITHUB_API_URL'] = 'https://api.github.com';
+process.env['INPUT_GPG_USERNAME'] = '...';
+process.env['INPUT_GPG_EMAIL'] = '...';
+process.env['INPUT_GPG_PRIVATE_KEY'] = `-----BEGIN PGP PRIVATE KEY BLOCK-----
+...
+-----END PGP PRIVATE KEY BLOCK-----`;
+process.env['INPUT_GPG_PASSPHRASE'] = '...';
 process.env['GITHUB_SERVER_URL'] = 'https://github.com';
 process.env['GITHUB_REPOSITORY'] = 'local/test';
 process.env['GITHUB_RUN_ID'] = '0';

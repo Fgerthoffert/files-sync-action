@@ -1,6 +1,7 @@
 import * as T from 'fp-ts/Either';
 import * as TE from 'fp-ts/TaskEither';
 import { getOctokit } from '@actions/github';
+import * as openpgp from 'openpgp';
 import type { Inputs } from './inputs.js';
 import type { MergeMode, MergeStrategy } from './config.ts';
 
@@ -57,12 +58,24 @@ export type CommitDiffEntry = {
   filename: string;
 };
 
+export type GitHubRepositoryUnsignedCommitParams = {
+  parent: string;
+  branch: string;
+  files: CommitFile[];
+  message: string;
+  force: boolean;
+};
+
 export type GitHubRepositoryCommitParams = {
   parent: string;
   branch: string;
   files: CommitFile[];
   message: string;
   force: boolean;
+  name: string;
+  email: string;
+  private_key: string;
+  passphrase: string;
 };
 
 export type GitHubRepositoryCreateOrUpdatePullRequestParams = {
@@ -92,6 +105,7 @@ export type GitHubRepository = {
   name: string;
   createBranch: (name: string) => TE.TaskEither<Error, Branch>;
   deleteBranch: (name: string) => TE.TaskEither<Error, void>;
+  unsignedCommit: (params: GitHubRepositoryUnsignedCommitParams) => TE.TaskEither<Error, Commit>;
   commit: (params: GitHubRepositoryCommitParams) => TE.TaskEither<Error, Commit>;
   compareCommits: (base: string, head: string) => TE.TaskEither<Error, CommitDiffEntry[]>;
   findExistingPullRequestByBranch: (branch: string) => TE.TaskEither<Error, PullRequest | null>;
@@ -303,7 +317,7 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
         });
       }, handleErrorReason),
 
-      commit: TE.tryCatchK(async ({ parent, branch, files, message, force }) => {
+      unsignedCommit: TE.tryCatchK(async ({ parent, branch, files, message, force }) => {
         // create tree
         const { data: tree } = await octokit.rest.git.createTree({
           ...defaults,
@@ -322,6 +336,85 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
           message,
           parents: [parent],
         });
+
+        // apply to branch
+        await octokit.rest.git.updateRef({
+          ...defaults,
+          ref: `heads/${branch}`,
+          sha: commit.sha,
+          force,
+        });
+
+        return commit;
+      }, handleErrorReason),
+
+      commit: TE.tryCatchK(async ({ parent, branch, files, message, force, name, email, private_key, passphrase }) => {
+        // create tree
+        const { data: tree } = await octokit.rest.git.createTree({
+          ...defaults,
+          base_tree: parent,
+          tree: files.map((file) => ({
+            mode: file.mode,
+            path: file.path,
+            content: file.content,
+          })),
+        });
+
+        const privateKey = await openpgp.decryptKey({
+          privateKey: await openpgp.readPrivateKey({ armoredKey: private_key }),
+          passphrase,
+        });
+
+        const now = Date.now();
+        const nowStr = new Date(now).toISOString();
+
+        const commitMessage = await openpgp.createMessage({
+          text: [
+            'tree ' + tree.sha,
+            'parent ' + parent,
+            'author ' + name + ' <' + email + '> ' + Math.floor(now / 1000) + ' +0000',
+            'committer ' + name + ' <' + email + '> ' + Math.floor(now / 1000) + ' +0000',
+            '',
+            message,
+          ].join('\n'),
+        });
+
+        const detachedSignature = await openpgp.sign({
+          message: commitMessage,
+          signingKeys: [privateKey],
+          detached: true,
+        });
+
+        // commit
+        const { data: commit } = await octokit.rest.git.createCommit({
+          ...defaults,
+          tree: tree.sha,
+          message,
+          parents: [parent],
+          author: {
+            name: name,
+            email: email,
+            date: nowStr,
+          },
+          committer: {
+            name: name,
+            email: email,
+            date: nowStr,
+          },
+          signature: detachedSignature.toString(),
+        });
+
+        const verification = commit.verification;
+        if (!verification || verification.verified !== true) {
+          throw new Error(
+            'Commit signature could not be verified - Key ID: ' +
+              privateKey.getKeyID() +
+              ' - Reason: ' +
+              verification.reason +
+              ' - Payload: ' +
+              verification.payload,
+          );
+        }
 
         // apply to branch
         await octokit.rest.git.updateRef({
