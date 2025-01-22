@@ -22,7 +22,7 @@ inputs:
     description: 'The email to use for the signature'
     default: ''
   gpg_private_key:
-    description: 'The private key created for the user with the username and email provided: -----BEGIN PGP PRIVATE KEY BLOCK----- ...'
+    description: 'The private key created for the user with the username and email provided'
     default: ''
   gpg_passphrase:
     description: 'The passphrase to read the key'
