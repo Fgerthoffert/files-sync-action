@@ -90285,16 +90285,21 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 privateKey: await readPrivateKey({ armoredKey: private_key }),
                 passphrase,
             });
-            const now = new Date();
+            const now = Date.now();
+            const nowStr = new Date(now).toISOString();
+            const authorEmail = 'jahia-ci@jahia.com';
+            const committerEmail = 'jahia-ci@jahia.com';
+            const authorName = 'Jahia CI';
+            const committerName = 'Jahia CI';
             const commitMessage = await createMessage({
                 text: [
-                    'tree ' + tree,
+                    'tree ' + tree.sha,
                     'parent ' + parent,
-                    'author Jahia Continuous Integration account <jahia-ci@jahia.com>' + Math.floor(now.getDate() / 1000) + ' +0000',
-                    'committer Jahia Continuous Integration account <jahia-ci@jahia.com>' + Math.floor(now.getDate() / 1000) + ' +0000',
+                    'author ' + authorName + ' <' + authorEmail + '> ' + Math.floor(now / 1000) + ' +0000',
+                    'committer ' + committerName + ' <' + committerEmail + '> ' + Math.floor(now / 1000) + ' +0000',
                     '',
                     message,
-                ].join('\n'),
+                ].join('\n')
             });
             const detachedSignature = await sign({
                 message: commitMessage,
@@ -90305,15 +90310,23 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
             const { data: commit } = await octokit.rest.git.createCommit({
                 ...defaults,
                 tree: tree.sha,
-                message: message,
+                message,
                 parents: [parent],
-                author: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now.toISOString() },
-                committer: { name: 'Jahia Continuous Integration account', email: 'jahia-ci@jahia.com', date: now.toISOString() },
+                author: {
+                    name: authorName,
+                    email: authorEmail,
+                    date: nowStr,
+                },
+                committer: {
+                    name: committerName,
+                    email: committerEmail,
+                    date: nowStr,
+                },
                 signature: detachedSignature.toString(),
             });
             const verification = commit.verification;
             if (!verification || verification.verified !== true) {
-                throw new Error('Commit signature could not be verified - Reason: ' +
+                throw new Error('Commit signature could not be verified - Key ID: ' + privateKey.getKeyID() + ' - Reason: ' +
                     verification.reason +
                     ' - Payload: ' +
                     verification.payload);
