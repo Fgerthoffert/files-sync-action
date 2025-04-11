@@ -1,6 +1,8 @@
 # :fork_and_knife: About the fork
 
-This codebase is a fork of https://github.com/wadackel/files-sync-action, it introduces the ability to delete files and folder from remote repositories.
+This codebase is a fork of https://github.com/wadackel/files-sync-action, it introduces the ability to:
+- delete files and folder from remote repositories
+- sign commits
 
 This was suggested in a PR here: https://github.com/wadackel/files-sync-action/pull/206
 
