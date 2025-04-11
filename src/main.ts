@@ -210,10 +210,10 @@ const run = async (): Promise<number> => {
             content: file.content,
           })),
           force: cfg.pull_request.force,
-          name: inputs.gpg_name,
-          email: inputs.gpg_email,
-          private_key: inputs.gpg_private_key,
-          passphrase: inputs.gpg_passphrase,
+          gpg_name: inputs.gpg_name,
+          gpg_email: inputs.gpg_email,
+          gpg_private_key: inputs.gpg_private_key,
+          gpg_passphrase: inputs.gpg_passphrase,
         })();
       } else {
         commit = await repo.unsignedCommit({

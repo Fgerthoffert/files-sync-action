@@ -90286,7 +90286,7 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 ...defaults,
                 tree: tree.sha,
                 message,
-                parents: [parent]
+                parents: [parent],
             });
             // apply to branch
             await octokit.rest.git.updateRef({
@@ -90297,7 +90297,7 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
             });
             return commit;
         }, handleErrorReason),
-        commit: TaskEither.tryCatchK(async ({ parent, branch, files, message, force, name, email, private_key, passphrase }) => {
+        commit: TaskEither.tryCatchK(async ({ parent, branch, files, message, force, gpg_name, gpg_email, gpg_private_key, gpg_passphrase }) => {
             // create tree
             const { data: tree } = await octokit.rest.git.createTree({
                 ...defaults,
@@ -90309,8 +90309,8 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 })),
             });
             const privateKey = await decryptKey({
-                privateKey: await readPrivateKey({ armoredKey: private_key }),
-                passphrase,
+                privateKey: await readPrivateKey({ armoredKey: gpg_private_key }),
+                passphrase: gpg_passphrase,
             });
             const now = Date.now();
             const nowStr = new Date(now).toISOString();
@@ -90318,8 +90318,8 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 text: [
                     'tree ' + tree.sha,
                     'parent ' + parent,
-                    'author ' + name + ' <' + email + '> ' + Math.floor(now / 1000) + ' +0000',
-                    'committer ' + name + ' <' + email + '> ' + Math.floor(now / 1000) + ' +0000',
+                    'author ' + gpg_name + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
+                    'committer ' + gpg_name + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
                     '',
                     message,
                 ].join('\n'),
@@ -90336,13 +90336,13 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 message,
                 parents: [parent],
                 author: {
-                    name: name,
-                    email: email,
+                    name: gpg_name,
+                    email: gpg_email,
                     date: nowStr,
                 },
                 committer: {
-                    name: name,
-                    email: email,
+                    name: gpg_name,
+                    email: gpg_email,
                     date: nowStr,
                 },
                 signature: detachedSignature.toString(),
@@ -90723,10 +90723,10 @@ const run = async () => {
                         content: file.content,
                     })),
                     force: cfg.pull_request.force,
-                    name: inputs.gpg_name,
-                    email: inputs.gpg_email,
-                    private_key: inputs.gpg_private_key,
-                    passphrase: inputs.gpg_passphrase
+                    gpg_name: inputs.gpg_name,
+                    gpg_email: inputs.gpg_email,
+                    gpg_private_key: inputs.gpg_private_key,
+                    gpg_passphrase: inputs.gpg_passphrase,
                 })();
             }
             else {
@@ -90747,7 +90747,7 @@ const run = async () => {
                         mode: file.mode,
                         content: file.content,
                     })),
-                    force: cfg.pull_request.force
+                    force: cfg.pull_request.force,
                 })();
             }
             if (fp_ts_Either__WEBPACK_IMPORTED_MODULE_11__.isLeft(commit)) {

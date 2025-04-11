@@ -72,10 +72,10 @@ export type GitHubRepositoryCommitParams = {
   files: CommitFile[];
   message: string;
   force: boolean;
-  name: string;
-  email: string;
-  private_key: string;
-  passphrase: string;
+  gpg_name: string;
+  gpg_email: string;
+  gpg_private_key: string;
+  gpg_passphrase: string;
 };
 
 export type GitHubRepositoryCreateOrUpdatePullRequestParams = {
@@ -348,84 +348,87 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
         return commit;
       }, handleErrorReason),
 
-      commit: TE.tryCatchK(async ({ parent, branch, files, message, force, name, email, private_key, passphrase }) => {
-        // create tree
-        const { data: tree } = await octokit.rest.git.createTree({
-          ...defaults,
-          base_tree: parent,
-          tree: files.map((file) => ({
-            mode: file.mode,
-            path: file.path,
-            content: file.content,
-          })),
-        });
+      commit: TE.tryCatchK(
+        async ({ parent, branch, files, message, force, gpg_name, gpg_email, gpg_private_key, gpg_passphrase }) => {
+          // create tree
+          const { data: tree } = await octokit.rest.git.createTree({
+            ...defaults,
+            base_tree: parent,
+            tree: files.map((file) => ({
+              mode: file.mode,
+              path: file.path,
+              content: file.content,
+            })),
+          });
 
-        const privateKey = await openpgp.decryptKey({
-          privateKey: await openpgp.readPrivateKey({ armoredKey: private_key }),
-          passphrase,
-        });
+          const privateKey = await openpgp.decryptKey({
+            privateKey: await openpgp.readPrivateKey({ armoredKey: gpg_private_key }),
+            passphrase: gpg_passphrase,
+          });
 
-        const now = Date.now();
-        const nowStr = new Date(now).toISOString();
+          const now = Date.now();
+          const nowStr = new Date(now).toISOString();
 
-        const commitMessage = await openpgp.createMessage({
-          text: [
-            'tree ' + tree.sha,
-            'parent ' + parent,
-            'author ' + name + ' <' + email + '> ' + Math.floor(now / 1000) + ' +0000',
-            'committer ' + name + ' <' + email + '> ' + Math.floor(now / 1000) + ' +0000',
-            '',
+          const commitMessage = await openpgp.createMessage({
+            text: [
+              'tree ' + tree.sha,
+              'parent ' + parent,
+              'author ' + gpg_name + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
+              'committer ' + gpg_name + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
+              '',
+              message,
+            ].join('\n'),
+          });
+
+          const detachedSignature = await openpgp.sign({
+            message: commitMessage,
+            signingKeys: [privateKey],
+            detached: true,
+          });
+
+          // commit
+          const { data: commit } = await octokit.rest.git.createCommit({
+            ...defaults,
+            tree: tree.sha,
             message,
-          ].join('\n'),
-        });
+            parents: [parent],
+            author: {
+              name: gpg_name,
+              email: gpg_email,
+              date: nowStr,
+            },
+            committer: {
+              name: gpg_name,
+              email: gpg_email,
+              date: nowStr,
+            },
+            signature: detachedSignature.toString(),
+          });
 
-        const detachedSignature = await openpgp.sign({
-          message: commitMessage,
-          signingKeys: [privateKey],
-          detached: true,
-        });
+          const verification = commit.verification;
+          if (!verification || verification.verified !== true) {
+            throw new Error(
+              'Commit signature could not be verified - Key ID: ' +
+                privateKey.getKeyID() +
+                ' - Reason: ' +
+                verification.reason +
+                ' - Payload: ' +
+                verification.payload,
+            );
+          }
 
-        // commit
-        const { data: commit } = await octokit.rest.git.createCommit({
-          ...defaults,
-          tree: tree.sha,
-          message,
-          parents: [parent],
-          author: {
-            name: name,
-            email: email,
-            date: nowStr,
-          },
-          committer: {
-            name: name,
-            email: email,
-            date: nowStr,
-          },
-          signature: detachedSignature.toString(),
-        });
+          // apply to branch
+          await octokit.rest.git.updateRef({
+            ...defaults,
+            ref: `heads/${branch}`,
+            sha: commit.sha,
+            force,
+          });
 
-        const verification = commit.verification;
-        if (!verification || verification.verified !== true) {
-          throw new Error(
-            'Commit signature could not be verified - Key ID: ' +
-              privateKey.getKeyID() +
-              ' - Reason: ' +
-              verification.reason +
-              ' - Payload: ' +
-              verification.payload,
-          );
-        }
-
-        // apply to branch
-        await octokit.rest.git.updateRef({
-          ...defaults,
-          ref: `heads/${branch}`,
-          sha: commit.sha,
-          force,
-        });
-
-        return commit;
-      }, handleErrorReason),
+          return commit;
+        },
+        handleErrorReason,
+      ),
 
       compareCommits: TE.tryCatchK(async (base, head) => {
         const { data: diff } = await octokit.rest.repos.compareCommits({
