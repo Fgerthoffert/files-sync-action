@@ -425,6 +425,10 @@ Configure the merge of the automatically generated PR when synchronizing files.
 | `rebase`   | Adds all synchronization commits to the target branch without a merge commit |
 | `squash`   | Squashes all synchronization commits into one merge commit                   |
 
+## Commit signature
+
+Follow [this documentation](https://docs.github.com/en/authentication/managing-commit-signature-verification/generating-a-new-gpg-key#generating-a-gpg-key) to generate a GPG key and then [these steps](https://docs.github.com/en/authentication/managing-commit-signature-verification/adding-a-gpg-key-to-your-github-account) to add the key to your Github account.
+
 ## Credits
 
 `files-sync-action` is inspired by the following GitHub Actions. Thanks!!
