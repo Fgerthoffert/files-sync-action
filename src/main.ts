@@ -212,31 +212,64 @@ const run = async (): Promise<number> => {
       info('Branch SHA', parent);
 
       // Commit files
-      const commit = await repo.commit({
-        parent,
-        branch,
-        message: render(cfg.commit.format, {
-          prefix: cfg.commit.prefix,
-          subject: render(cfg.commit.subject, {
+      let commit;
+      if (inputs.gpg_private_key !== null && inputs.gpg_passphrase !== null) {
+        commit = await repo.commit({
+          parent,
+          branch,
+          message: render(cfg.commit.format, {
+            prefix: cfg.commit.prefix,
+            subject: render(cfg.commit.subject, {
+              repository: GH_REPOSITORY,
+              index: i,
+            }),
             repository: GH_REPOSITORY,
             index: i,
           }),
-          repository: GH_REPOSITORY,
-          index: i,
-        }),
-        files: files.right.map((file) => ({
-          path: file.to,
-          mode: file.mode,
-          content: file.content,
-        })),
-        deleteFiles: deleteFiles.map((deleteFile) => ({
-          path: deleteFile.path,
-          mode: deleteFile.type === 'directory' ? '040000' : '100644',
-          type: deleteFile.type === 'directory' ? 'tree' : 'blob',
-          sha: null,
-        })),
-        force: cfg.pull_request.force,
-      })();
+          files: files.right.map((file) => ({
+            path: file.to,
+            mode: file.mode,
+            content: file.content,
+          })),
+          deleteFiles: deleteFiles.map((deleteFile) => ({
+            path: deleteFile.path,
+            mode: deleteFile.type === 'directory' ? '040000' : '100644',
+            type: deleteFile.type === 'directory' ? 'tree' : 'blob',
+            sha: null,
+          })),
+          force: cfg.pull_request.force,
+          gpg_name: inputs.gpg_name,
+          gpg_email: inputs.gpg_email,
+          gpg_private_key: inputs.gpg_private_key,
+          gpg_passphrase: inputs.gpg_passphrase,
+        })();
+      } else {
+        commit = await repo.unsignedCommit({
+          parent,
+          branch,
+          message: render(cfg.commit.format, {
+            prefix: cfg.commit.prefix,
+            subject: render(cfg.commit.subject, {
+              repository: GH_REPOSITORY,
+              index: i,
+            }),
+            repository: GH_REPOSITORY,
+            index: i,
+          }),
+          files: files.right.map((file) => ({
+            path: file.to,
+            mode: file.mode,
+            content: file.content,
+          })),
+          deleteFiles: deleteFiles.map((deleteFile) => ({
+            path: deleteFile.path,
+            mode: deleteFile.type === 'directory' ? '040000' : '100644',
+            type: deleteFile.type === 'directory' ? 'tree' : 'blob',
+            sha: null,
+          })),
+          force: cfg.pull_request.force,
+        })();
+      }
       if (T.isLeft(commit)) {
         core.info(
           'If pushing to .github/workflows, make sure the github token has the "workflow" scope. See: https://github.com/wadackel/files-sync-action?tab=readme-ov-file#authentication',

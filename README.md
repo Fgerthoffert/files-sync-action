@@ -1,6 +1,9 @@
 # :fork_and_knife: About the fork
 
-This codebase is a fork of https://github.com/wadackel/files-sync-action, it introduces the ability to delete files and folder from remote repositories.
+This codebase is a fork of https://github.com/wadackel/files-sync-action, it introduces the ability to:
+
+- delete files and folder from remote repositories
+- sign commits
 
 This was suggested in a PR here: https://github.com/wadackel/files-sync-action/pull/206
 
@@ -109,7 +112,7 @@ patterns:
       - .prettierrc.json
       - from: workflows/ci.yaml
         to: .github/workflows/ci.yaml
-    delete_files:
+  - delete_files:
       - a-file-to-delete.md
       - path: a/folder/to/delete
         type: directory
@@ -159,6 +162,36 @@ API URL of the GitHub server.
 **Default:** `.github/files-sync-config.yaml`
 
 The path for the sync configuration file.
+
+### `gpg_username`
+
+**Required:** `false`  
+**Default:** ``
+
+The username to use for the signature
+
+### `gpg_email`
+
+**Required:** `false`  
+**Default:** ``
+
+The email to use for the signature
+
+### `gpg_private_key`
+
+**Required:** `false`  
+**Default:** ``
+
+The private key created for the user with the username and email provided: `-----BEGIN PGP PRIVATE KEY BLOCK-----
+...
+-----END PGP PRIVATE KEY BLOCK-----`
+
+### `gpg_passphrase`
+
+**Required:** `false`  
+**Default:** ``
+
+The passphrase to read the key
 
 <!-- gha-inputs-end -->
 
@@ -410,6 +443,10 @@ Configure the merge of the automatically generated PR when synchronizing files.
 | `rebase`   | Adds all synchronization commits to the target branch without a merge commit |
 | `squash`   | Squashes all synchronization commits into one merge commit                   |
 
+## Commit signature
+
+Follow [this documentation](https://docs.github.com/en/authentication/managing-commit-signature-verification/generating-a-new-gpg-key#generating-a-gpg-key) to generate a GPG key and then [these steps](https://docs.github.com/en/authentication/managing-commit-signature-verification/adding-a-gpg-key-to-your-github-account) to add the key to your Github account.
+
 ## Credits
 
 `files-sync-action` is inspired by the following GitHub Actions. Thanks!!
@@ -450,6 +487,12 @@ Customize the contents of each created file.
 process.env['INPUT_GITHUB_TOKEN'] = '...';
 process.env['INPUT_CONFIG_FILE'] = 'test.yaml';
 process.env['INPUT_GITHUB_API_URL'] = 'https://api.github.com';
+process.env['INPUT_GPG_USERNAME'] = '...';
+process.env['INPUT_GPG_EMAIL'] = '...';
+process.env['INPUT_GPG_PRIVATE_KEY'] = `-----BEGIN PGP PRIVATE KEY BLOCK-----
+...
+-----END PGP PRIVATE KEY BLOCK-----`;
+process.env['INPUT_GPG_PASSPHRASE'] = '...';
 process.env['GITHUB_SERVER_URL'] = 'https://github.com';
 process.env['GITHUB_REPOSITORY'] = 'local/test';
 process.env['GITHUB_RUN_ID'] = '0';

@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import * as T from 'fp-ts/Either';
 import * as TE from 'fp-ts/TaskEither';
 import { getOctokit } from '@actions/github';
+import * as openpgp from 'openpgp';
 import type { Inputs } from './inputs.js';
 import type { MergeMode, MergeStrategy } from './config.ts';
 
@@ -67,6 +68,15 @@ export type CommitDiffEntry = {
   filename: string;
 };
 
+export type GitHubRepositoryUnsignedCommitParams = {
+  parent: string;
+  branch: string;
+  files: CommitFile[];
+  deleteFiles: CommitDeleteFile[];
+  message: string;
+  force: boolean;
+};
+
 export type GitHubRepositoryCommitParams = {
   parent: string;
   branch: string;
@@ -74,6 +84,10 @@ export type GitHubRepositoryCommitParams = {
   deleteFiles: CommitDeleteFile[];
   message: string;
   force: boolean;
+  gpg_name: string;
+  gpg_email: string;
+  gpg_private_key: string;
+  gpg_passphrase: string;
 };
 
 export type GitHubRepositoryCreateOrUpdatePullRequestParams = {
@@ -103,6 +117,7 @@ export type GitHubRepository = {
   name: string;
   createBranch: (name: string) => TE.TaskEither<Error, Branch>;
   deleteBranch: (name: string) => TE.TaskEither<Error, void>;
+  unsignedCommit: (params: GitHubRepositoryUnsignedCommitParams) => TE.TaskEither<Error, Commit>;
   commit: (params: GitHubRepositoryCommitParams) => TE.TaskEither<Error, Commit>;
   compareCommits: (base: string, head: string) => TE.TaskEither<Error, CommitDiffEntry[]>;
   findExistingPullRequestByBranch: (branch: string) => TE.TaskEither<Error, PullRequest | null>;
@@ -314,7 +329,7 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
         });
       }, handleErrorReason),
 
-      commit: TE.tryCatchK(async ({ parent, branch, files, deleteFiles, message, force }) => {
+      unsignedCommit: TE.tryCatchK(async ({ parent, branch, files, deleteFiles, message, force }) => {
         // create tree
         const { data: tree } = await octokit.rest.git.createTree({
           ...defaults,
@@ -384,7 +399,7 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
         // commit
         const { data: commit } = await octokit.rest.git.createCommit({
           ...defaults,
-          tree: newTree.sha,
+          tree: tree.sha,
           message,
           parents: [parent],
         });
@@ -399,6 +414,154 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
 
         return commit;
       }, handleErrorReason),
+
+      commit: TE.tryCatchK(
+        async ({
+          parent,
+          branch,
+          files,
+          deleteFiles,
+          message,
+          force,
+          gpg_name,
+          gpg_email,
+          gpg_private_key,
+          gpg_passphrase,
+        }) => {
+          // create tree
+          const { data: tree } = await octokit.rest.git.createTree({
+            ...defaults,
+            base_tree: parent,
+            tree: files.map((file) => ({
+              mode: file.mode,
+              path: file.path,
+              content: file.content,
+            })),
+          });
+
+          const privateKey = await openpgp.decryptKey({
+            privateKey: await openpgp.readPrivateKey({ armoredKey: gpg_private_key }),
+            passphrase: gpg_passphrase,
+          });
+
+          const now = Date.now();
+          const nowStr = new Date(now).toISOString();
+
+          const commitMessage = await openpgp.createMessage({
+            text: [
+              'tree ' + tree.sha,
+              'parent ' + parent,
+              'author ' + gpg_name + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
+              'committer ' + gpg_name + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
+              '',
+              message,
+            ].join('\n'),
+          });
+
+          const detachedSignature = await openpgp.sign({
+            message: commitMessage,
+            signingKeys: [privateKey],
+            detached: true,
+          });
+
+          let filesToDelete: CommitDeleteFile[] = [];
+          if (deleteFiles.length > 0) {
+            // If there are files or directories to delete, we need to ensure
+            // these files are actually present in the tree. If not present,
+            // they should be removed to avoid the following error:
+            // HttpError: GitRPC::BadObjectState
+
+            // Get the entire tree of the parent commit
+            const { data: originTree } = await octokit.rest.git.getTree({
+              ...defaults,
+              recursive: 'true',
+              tree_sha: parent,
+            });
+            if (originTree.truncated) {
+              core.info(
+                'The tree in the requested repository was truncated due to size. This may cause issues with the deletion of files.',
+              );
+              core.info(
+                'The limit for the tree array is 100,000 entries with a maximum size of 7 MB when using the recursive parameter. ',
+              );
+              core.info('See: https://docs.github.com/en/rest/git/trees?apiVersion=2022-11-28#get-a-tree');
+            }
+
+            core.debug(`Listing files present in the tree of the parent commit:`);
+            originTree.tree.map((treeFile) => {
+              core.debug(`Tree file: ${JSON.stringify(treeFile.path)}`);
+            });
+
+            filesToDelete = originTree.tree.reduce((acc: CommitDeleteFile[], treeFile) => {
+              const fileToDelete = deleteFiles.find((f) => f.path === treeFile.path);
+              if (fileToDelete !== undefined) {
+                core.info(`Delete: file: ${fileToDelete.path} is present and will be deleted`);
+                acc.push(fileToDelete);
+              }
+              return acc;
+            }, []);
+          }
+
+          const updatedTreeItems = tree.tree.reduce((acc: CommitDeleteFile[], treeFile) => {
+            if (acc.length === 0) {
+              acc = [...filesToDelete];
+            }
+            const fileToDelete = filesToDelete.find((f) => f.path === treeFile.path);
+            if (fileToDelete === undefined) {
+              acc.push(treeFile as CommitDeleteFile);
+            }
+            return acc;
+          }, []);
+
+          const { data: newTree } = await octokit.rest.git.createTree({
+            ...defaults,
+            base_tree: tree.sha,
+            tree: updatedTreeItems,
+          });
+
+          // commit
+          const { data: commit } = await octokit.rest.git.createCommit({
+            ...defaults,
+            tree: tree.sha,
+            message,
+            parents: [parent],
+            author: {
+              name: gpg_name,
+              email: gpg_email,
+              date: nowStr,
+            },
+            committer: {
+              name: gpg_name,
+              email: gpg_email,
+              date: nowStr,
+            },
+            signature: detachedSignature.toString(),
+          });
+
+          const verification = commit.verification;
+          if (!verification || verification.verified !== true) {
+            throw new Error(
+              'Commit signature could not be verified - Key ID: ' +
+                privateKey.getKeyID() +
+                ' - Reason: ' +
+                verification.reason +
+                ' - Payload: ' +
+                verification.payload,
+            );
+          }
+
+          // apply to branch
+          await octokit.rest.git.updateRef({
+            ...defaults,
+            ref: `heads/${branch}`,
+            sha: commit.sha,
+            force,
+          });
+
+          return commit;
+        },
+        handleErrorReason,
+      ),
 
       compareCommits: TE.tryCatchK(async (base, head) => {
         const { data: diff } = await octokit.rest.repos.compareCommits({

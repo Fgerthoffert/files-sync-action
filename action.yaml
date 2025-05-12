@@ -1,5 +1,5 @@
 name: 'Files Sync and Delete'
-description: 'Synchronizes files across multiple repositories. A fork of "Files Sync" supporting deletion of files and folders.'
+description: 'Synchronizes files across multiple repositories. A fork of "Files Sync" supporting commit signature and deletion of files and folders.'
 author: 'wadackel'
 branding:
   color: white
@@ -15,6 +15,18 @@ inputs:
   config_file:
     description: 'The path for the sync configuration file.'
     default: '.github/files-sync-config.yaml'
+  gpg_username:
+    description: 'The username to use for the signature'
+    default: ''
+  gpg_email:
+    description: 'The email to use for the signature'
+    default: ''
+  gpg_private_key:
+    description: 'The private key created for the user with the username and email provided'
+    default: ''
+  gpg_passphrase:
+    description: 'The passphrase to read the key'
+    default: ''
 
 outputs:
   pull_request_urls:
