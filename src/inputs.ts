@@ -6,7 +6,7 @@ const keys: [key: string, required: boolean][] = [
   ['github_token', true],
   ['github_api_url', true],
   ['config_file', true],
-  ['gpg_name', false],
+  ['gpg_username', false],
   ['gpg_email', false],
   ['gpg_private_key', false],
   ['gpg_passphrase', false],
