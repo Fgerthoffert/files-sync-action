@@ -16,7 +16,7 @@ export type Inputs = {
   github_token: string;
   github_api_url: string;
   config_file: string;
-  gpg_name: string;
+  gpg_username: string;
   gpg_email: string;
   gpg_private_key: string;
   gpg_passphrase: string;
