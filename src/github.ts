@@ -84,7 +84,7 @@ export type GitHubRepositoryCommitParams = {
   deleteFiles: CommitDeleteFile[];
   message: string;
   force: boolean;
-  gpg_name: string;
+  gpg_username: string;
   gpg_email: string;
   gpg_private_key: string;
   gpg_passphrase: string;
@@ -423,7 +423,7 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
           deleteFiles,
           message,
           force,
-          gpg_name,
+          gpg_username,
           gpg_email,
           gpg_private_key,
           gpg_passphrase,
@@ -451,8 +451,8 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
             text: [
               'tree ' + tree.sha,
               'parent ' + parent,
-              'author ' + gpg_name + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
-              'committer ' + gpg_name + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
+              'author ' + gpg_username + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
+              'committer ' + gpg_username + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
               '',
               message,
             ].join('\n'),
@@ -526,12 +526,12 @@ const createGitHubRepository = TE.tryCatchK<Error, [CreateGitHubRepositoryParams
             message,
             parents: [parent],
             author: {
-              name: gpg_name,
+              name: gpg_username,
               email: gpg_email,
               date: nowStr,
             },
             committer: {
-              name: gpg_name,
+              name: gpg_username,
               email: gpg_email,
               date: nowStr,
             },
