@@ -26,7 +26,9 @@ export const getInputs = (): Inputs => {
   const inputs = Object.create(null);
   for (const [key, required] of keys) {
     const v = core.getInput(key, { required });
-    console.log('key: "%s" value: "%s"', key, v);
+    if (v === null || v === '') {
+      core.info('Empty value for key: "%s"', key);
+    }
     inputs[key] = !required && v === '' ? null : v;
   }
   return inputs as Inputs;
