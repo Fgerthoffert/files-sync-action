@@ -1,5 +1,5 @@
 name: 'Files Sync and Delete'
-description: 'Synchronizes files across multiple repositories. A fork of "Files Sync" supporting commit signature and deletion of files and folders.'
+description: 'Syncs files across repos. Fork of "Files Sync" with commit signature support & file/folder deletion.'
 author: 'wadackel'
 branding:
   color: white
