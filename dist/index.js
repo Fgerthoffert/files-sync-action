@@ -57352,7 +57352,7 @@ __nccwpck_require__.d(__webpack_exports__, {
   "ME": () => (/* binding */ loadConfig)
 });
 
-// UNUSED EXPORTS: MergeMode, MergeStrategy, branchConfigSchema, commitConfigSchema, configSchema, fileConfigSchema, mergeConfigSchema, patternConfigSchema, pullRequestConfigSchema, settingsConfigSchema, templateConfigSchema
+// UNUSED EXPORTS: MergeMode, MergeStrategy, branchConfigSchema, commitConfigSchema, configSchema, deleteFileConfigSchema, fileConfigSchema, mergeConfigSchema, patternConfigSchema, pullRequestConfigSchema, settingsConfigSchema, templateConfigSchema
 
 // EXTERNAL MODULE: external "node:fs/promises"
 var promises_ = __nccwpck_require__(3977);
@@ -61369,9 +61369,14 @@ const fileConfigSchema = z.object({
     to: z.string(),
     exclude: z.array(z.string()).optional(),
 });
+const deleteFileConfigSchema = z.object({
+    path: z.string(),
+    type: z["enum"](['file', 'directory']),
+});
 const templateConfigSchema = z.record(z.string(), z.any());
 const patternConfigSchema = z.object({
     files: z.array(z.union([z.string(), fileConfigSchema])),
+    delete_files: z.array(z.union([z.string(), deleteFileConfigSchema])).optional(),
     repositories: z.array(z.string()),
     commit: commitConfigSchema.optional(),
     branch: branchConfigSchema.optional(),
@@ -61443,6 +61448,7 @@ const loadConfig = TaskEither.tryCatchK(async (filepath) => {
 /* harmony export */   "g$": () => (/* binding */ GH_WORKFLOW),
 /* harmony export */   "jR": () => (/* binding */ PR_FOOTER),
 /* harmony export */   "oR": () => (/* binding */ GH_RUN_ID),
+/* harmony export */   "pb": () => (/* binding */ defaultDeleteFile),
 /* harmony export */   "w2": () => (/* binding */ defaultFile)
 /* harmony export */ });
 const GH_SERVER = process.env['GITHUB_SERVER_URL'] ?? '';
@@ -61483,10 +61489,16 @@ This PR contains the following updates:
 
 ---
 
-### Changed Files
+### Modified Files
 
 <%_ for (const file of changes) { -%>
 - <% if (file.from === file.to) { %>\`<%- file.to %>\`<% } else { %>\`<%- file.from %>\` to \`<%- file.to %>\`<% }%>
+<%_ } -%>
+
+### Deleted Files
+
+<%_ for (const file of deleted) { -%>
+- \`<%- file.path %>\`
 <%_ } -%>
     `.trim(),
         reviewers: [],
@@ -61503,6 +61515,9 @@ This PR contains the following updates:
 const defaultFile = {
     exclude: [],
 };
+const defaultDeleteFile = {
+    type: 'file',
+};
 
 
 /***/ }),
@@ -61517,6 +61532,8 @@ __nccwpck_require__.d(__webpack_exports__, {
   "n": () => (/* binding */ createGitHub)
 });
 
+// EXTERNAL MODULE: ./node_modules/.pnpm/@actions+core@1.10.0/node_modules/@actions/core/lib/core.js
+var core = __nccwpck_require__(431);
 // EXTERNAL MODULE: ./node_modules/.pnpm/fp-ts@2.13.1/node_modules/fp-ts/lib/Either.js
 var Either = __nccwpck_require__(9813);
 // EXTERNAL MODULE: ./node_modules/.pnpm/fp-ts@2.13.1/node_modules/fp-ts/lib/TaskEither.js
@@ -90115,6 +90132,7 @@ var index = /*#__PURE__*/_mergeNamespaces({
 
 
 
+
 const handleErrorReason = (reason) => new Error(String(reason));
 const removeAtMark = (input) => input.replace(/^@/, '');
 const parseRepositoryName = (name) => {
@@ -90270,7 +90288,7 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 ref: `heads/${name}`,
             });
         }, handleErrorReason),
-        unsignedCommit: TaskEither.tryCatchK(async ({ parent, branch, files, message, force }) => {
+        unsignedCommit: TaskEither.tryCatchK(async ({ parent, branch, files, deleteFiles, message, force }) => {
             // create tree
             const { data: tree } = await octokit.rest.git.createTree({
                 ...defaults,
@@ -90280,6 +90298,51 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                     path: file.path,
                     content: file.content,
                 })),
+            });
+            let filesToDelete = [];
+            if (deleteFiles.length > 0) {
+                // If there are files or directories to delete, we need to ensure
+                // these files are actually present in the tree. If not present,
+                // they should be removed to avoid the following error:
+                // HttpError: GitRPC::BadObjectState
+                // Get the entire tree of the parent commit
+                const { data: originTree } = await octokit.rest.git.getTree({
+                    ...defaults,
+                    recursive: 'true',
+                    tree_sha: parent,
+                });
+                if (originTree.truncated) {
+                    core.info('The tree in the requested repository was truncated due to size. This may cause issues with the deletion of files.');
+                    core.info('The limit for the tree array is 100,000 entries with a maximum size of 7 MB when using the recursive parameter. ');
+                    core.info('See: https://docs.github.com/en/rest/git/trees?apiVersion=2022-11-28#get-a-tree');
+                }
+                core.debug(`Listing files present in the tree of the parent commit:`);
+                originTree.tree.map((treeFile) => {
+                    core.debug(`Tree file: ${JSON.stringify(treeFile.path)}`);
+                });
+                filesToDelete = originTree.tree.reduce((acc, treeFile) => {
+                    const fileToDelete = deleteFiles.find((f) => f.path === treeFile.path);
+                    if (fileToDelete !== undefined) {
+                        core.info(`Delete: file: ${fileToDelete.path} is present and will be deleted`);
+                        acc.push(fileToDelete);
+                    }
+                    return acc;
+                }, []);
+            }
+            const updatedTreeItems = tree.tree.reduce((acc, treeFile) => {
+                if (acc.length === 0) {
+                    acc = [...filesToDelete];
+                }
+                const fileToDelete = filesToDelete.find((f) => f.path === treeFile.path);
+                if (fileToDelete === undefined) {
+                    acc.push(treeFile);
+                }
+                return acc;
+            }, []);
+            const { data: newTree } = await octokit.rest.git.createTree({
+                ...defaults,
+                base_tree: tree.sha,
+                tree: updatedTreeItems,
             });
             // commit
             const { data: commit } = await octokit.rest.git.createCommit({
@@ -90297,7 +90360,7 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
             });
             return commit;
         }, handleErrorReason),
-        commit: TaskEither.tryCatchK(async ({ parent, branch, files, message, force, gpg_name, gpg_email, gpg_private_key, gpg_passphrase }) => {
+        commit: TaskEither.tryCatchK(async ({ parent, branch, files, deleteFiles, message, force, gpg_username, gpg_email, gpg_private_key, gpg_passphrase, }) => {
             // create tree
             const { data: tree } = await octokit.rest.git.createTree({
                 ...defaults,
@@ -90318,8 +90381,8 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 text: [
                     'tree ' + tree.sha,
                     'parent ' + parent,
-                    'author ' + gpg_name + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
-                    'committer ' + gpg_name + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
+                    'author ' + gpg_username + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
+                    'committer ' + gpg_username + ' <' + gpg_email + '> ' + Math.floor(now / 1000) + ' +0000',
                     '',
                     message,
                 ].join('\n'),
@@ -90329,6 +90392,51 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 signingKeys: [privateKey],
                 detached: true,
             });
+            let filesToDelete = [];
+            if (deleteFiles.length > 0) {
+                // If there are files or directories to delete, we need to ensure
+                // these files are actually present in the tree. If not present,
+                // they should be removed to avoid the following error:
+                // HttpError: GitRPC::BadObjectState
+                // Get the entire tree of the parent commit
+                const { data: originTree } = await octokit.rest.git.getTree({
+                    ...defaults,
+                    recursive: 'true',
+                    tree_sha: parent,
+                });
+                if (originTree.truncated) {
+                    core.info('The tree in the requested repository was truncated due to size. This may cause issues with the deletion of files.');
+                    core.info('The limit for the tree array is 100,000 entries with a maximum size of 7 MB when using the recursive parameter. ');
+                    core.info('See: https://docs.github.com/en/rest/git/trees?apiVersion=2022-11-28#get-a-tree');
+                }
+                core.debug(`Listing files present in the tree of the parent commit:`);
+                originTree.tree.map((treeFile) => {
+                    core.debug(`Tree file: ${JSON.stringify(treeFile.path)}`);
+                });
+                filesToDelete = originTree.tree.reduce((acc, treeFile) => {
+                    const fileToDelete = deleteFiles.find((f) => f.path === treeFile.path);
+                    if (fileToDelete !== undefined) {
+                        core.info(`Delete: file: ${fileToDelete.path} is present and will be deleted`);
+                        acc.push(fileToDelete);
+                    }
+                    return acc;
+                }, []);
+            }
+            const updatedTreeItems = tree.tree.reduce((acc, treeFile) => {
+                if (acc.length === 0) {
+                    acc = [...filesToDelete];
+                }
+                const fileToDelete = filesToDelete.find((f) => f.path === treeFile.path);
+                if (fileToDelete === undefined) {
+                    acc.push(treeFile);
+                }
+                return acc;
+            }, []);
+            const { data: newTree } = await octokit.rest.git.createTree({
+                ...defaults,
+                base_tree: tree.sha,
+                tree: updatedTreeItems,
+            });
             // commit
             const { data: commit } = await octokit.rest.git.createCommit({
                 ...defaults,
@@ -90336,12 +90444,12 @@ const createGitHubRepository = TaskEither.tryCatchK(async ({ octokit, name }) =>
                 message,
                 parents: [parent],
                 author: {
-                    name: gpg_name,
+                    name: gpg_username,
                     email: gpg_email,
                     date: nowStr,
                 },
                 committer: {
-                    name: gpg_name,
+                    name: gpg_username,
                     email: gpg_email,
                     date: nowStr,
                 },
@@ -90513,10 +90621,10 @@ const keys = [
     ['github_token', true],
     ['github_api_url', true],
     ['config_file', true],
-    ['gpg_name', false],
-    ['gpg_email', false],
-    ['gpg_private_key', false],
-    ['gpg_passphrase', false],
+    ['gpg_username', true],
+    ['gpg_email', true],
+    ['gpg_private_key', true],
+    ['gpg_passphrase', true],
 ];
 const getInputs = () => {
     const inputs = Object.create(null);
@@ -90659,6 +90767,23 @@ const run = async () => {
         }
         // Commit to repository
         _actions_core__WEBPACK_IMPORTED_MODULE_2__.info(`Synchronize ${files.right.length} files:`);
+        const deleteFiles = entry.delete_files !== undefined
+            ? entry.delete_files.map((f) => {
+                const deleteFile = typeof f === 'string'
+                    ? {
+                        ..._constants_js__WEBPACK_IMPORTED_MODULE_7__/* .defaultDeleteFile */ .pb,
+                        path: f,
+                        type: 'file',
+                    }
+                    : {
+                        ...f,
+                    };
+                return deleteFile;
+            })
+            : [];
+        for (const deleteFile of deleteFiles) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_2__.debug(`  - delete "${deleteFile.path}" of type "${deleteFile.type}"`);
+        }
         for (const name of entry.repositories) {
             _actions_core__WEBPACK_IMPORTED_MODULE_2__.info('	');
             const id = `patterns.${i} ${name}`;
@@ -90722,8 +90847,14 @@ const run = async () => {
                         mode: file.mode,
                         content: file.content,
                     })),
+                    deleteFiles: deleteFiles.map((deleteFile) => ({
+                        path: deleteFile.path,
+                        mode: deleteFile.type === 'directory' ? '040000' : '100644',
+                        type: deleteFile.type === 'directory' ? 'tree' : 'blob',
+                        sha: null,
+                    })),
                     force: cfg.pull_request.force,
-                    gpg_name: inputs.gpg_name,
+                    gpg_username: inputs.gpg_username,
                     gpg_email: inputs.gpg_email,
                     gpg_private_key: inputs.gpg_private_key,
                     gpg_passphrase: inputs.gpg_passphrase,
@@ -90746,6 +90877,12 @@ const run = async () => {
                         path: file.to,
                         mode: file.mode,
                         content: file.content,
+                    })),
+                    deleteFiles: deleteFiles.map((deleteFile) => ({
+                        path: deleteFile.path,
+                        mode: deleteFile.type === 'directory' ? '040000' : '100644',
+                        type: deleteFile.type === 'directory' ? 'tree' : 'blob',
+                        sha: null,
                     })),
                     force: cfg.pull_request.force,
                 })();
@@ -90800,9 +90937,16 @@ const run = async () => {
                         number: _constants_js__WEBPACK_IMPORTED_MODULE_7__/* .GH_RUN_NUMBER */ .$H,
                         url: `${_constants_js__WEBPACK_IMPORTED_MODULE_7__/* .GH_SERVER */ .WL}/${_constants_js__WEBPACK_IMPORTED_MODULE_7__/* .GH_REPOSITORY */ .Xf}/actions/runs/${_constants_js__WEBPACK_IMPORTED_MODULE_7__/* .GH_RUN_ID */ .oR}`,
                     },
-                    changes: diff.right.map((d) => ({
+                    changes: diff.right
+                        .filter((d) => d.status !== 'removed')
+                        .map((d) => ({
                         from: files.right.find((f) => f.to === d.filename)?.from,
                         to: d.filename,
+                    })),
+                    deleted: diff.right
+                        .filter((d) => d.status === 'removed')
+                        .map((d) => ({
+                        path: d.filename,
                     })),
                     index: i,
                 }),

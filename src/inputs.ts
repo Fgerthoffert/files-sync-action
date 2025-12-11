@@ -6,10 +6,10 @@ const keys: [key: string, required: boolean][] = [
   ['github_token', true],
   ['github_api_url', true],
   ['config_file', true],
-  ['gpg_username', false],
-  ['gpg_email', false],
-  ['gpg_private_key', false],
-  ['gpg_passphrase', false],
+  ['gpg_username', true],
+  ['gpg_email', true],
+  ['gpg_private_key', true],
+  ['gpg_passphrase', true],
 ];
 
 export type Inputs = {
@@ -26,6 +26,9 @@ export const getInputs = (): Inputs => {
   const inputs = Object.create(null);
   for (const [key, required] of keys) {
     const v = core.getInput(key, { required });
+    if (v === null || v === '') {
+      core.info('Empty value for key: "%s"', key);
+    }
     inputs[key] = !required && v === '' ? null : v;
   }
   return inputs as Inputs;

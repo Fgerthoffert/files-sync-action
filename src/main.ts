@@ -238,7 +238,7 @@ const run = async (): Promise<number> => {
             sha: null,
           })),
           force: cfg.pull_request.force,
-          gpg_name: inputs.gpg_username,
+          gpg_username: inputs.gpg_username,
           gpg_email: inputs.gpg_email,
           gpg_private_key: inputs.gpg_private_key,
           gpg_passphrase: inputs.gpg_passphrase,
